@@ -1,0 +1,123 @@
+{
+  "Comment": "Order processing workflow with AWS Step Functions (Saga Pattern with Order ID)",
+  "StartAt": "CreateOrder",
+  "States": {
+    "CreateOrder": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/329599649995/OrderQueue",
+        "MessageBody": {
+          "orderId.$": "$.orderId",
+          "product.$": "$.product",
+          "amount.$": "$.amount",
+          "Action": "CreateOrder"
+        }
+      },
+      "ResultPath": "$.CreateOrderResult",
+      "Next": "ProcessPayment",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error-info",
+          "Next": "HandleOrderFailure"
+        }
+      ]
+    },
+    "ProcessPayment": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/329599649995/PaymentQueueee",
+        "MessageBody": {
+          "orderId.$": "$.orderId",
+          "amount.$": "$.amount",
+          "Action": "ProcessPayment"
+        }
+      },
+      "ResultPath": "$.ProcessPaymentResult",
+      "Next": "SendConfirmation",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error-info",
+          "Next": "HandlePaymentFailure"
+        }
+      ]
+    },
+    "SendConfirmation": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/329599649995/MailQueue",
+        "MessageBody": {
+          "orderId.$": "$.orderId",
+          "Action": "SendConfirmation"
+        }
+      },
+      "End": true,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error-info",
+          "Next": "HandleConfirmationFailure"
+        }
+      ]
+    },
+    "HandleOrderFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/329599649995/OrderFailureQueue",
+        "MessageBody": {
+          "orderId.$": "$.orderId",
+          "Action": "OrderCreationFailed"
+        }
+      },
+      "End": true
+    },
+    "HandlePaymentFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/329599649995/PaymentFailureQueue",
+        "MessageBody": {
+          "orderId.$": "$.orderId",
+          "Action": "PaymentFailed"
+        }
+      },
+      "ResultPath": "$.HandlePaymentFailureResult",
+      "Next": "DeleteOrder"
+    },
+    "DeleteOrder": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/329599649995/DeleteOrderQueue",
+        "MessageBody": {
+          "orderId.$": "$.orderId",
+          "Action": "DeleteOrder"
+        }
+      },
+      "End": true
+    },
+    "HandleConfirmationFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage",
+      "Parameters": {
+        "QueueUrl": "https://sqs.us-east-1.amazonaws.com/329599649995/MailFailureQueue",
+        "MessageBody": {
+          "orderId.$": "$.orderId",
+          "Action": "ConfirmationFailed"
+        }
+      },
+      "End": true
+    }
+  }
+}
